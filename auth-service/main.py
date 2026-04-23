@@ -1,6 +1,7 @@
 import os
 import logging
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import jwt
@@ -99,6 +100,14 @@ async def lifespan(app: FastAPI):
     logger.info("Auth Service shutdown")
 
 app = FastAPI(title="Auth Service", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ====================== Health Check ======================
 

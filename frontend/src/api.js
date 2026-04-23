@@ -1,60 +1,69 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+const AUTH_SERVICE_URL = process.env.REACT_APP_AUTH_SERVICE_URL || 'http://localhost:8001';
+const PRODUCT_SERVICE_URL = process.env.REACT_APP_PRODUCT_SERVICE_URL || 'http://localhost:8002';
+const RAFFLE_SERVICE_URL = process.env.REACT_APP_RAFFLE_SERVICE_URL || 'http://localhost:8003';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const createApi = (baseURL) => {
+  const instance = axios.create({
+    baseURL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+  instance.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+
+  return instance;
+};
+
+export const authAPIClient = createApi(AUTH_SERVICE_URL);
+export const productAPIClient = createApi(PRODUCT_SERVICE_URL);
+export const raffleAPIClient = createApi(RAFFLE_SERVICE_URL);
 
 // Auth API
 export const authAPI = {
   register: (email, username, password) =>
-    api.post('/auth/register', { email, username, password }),
+    authAPIClient.post('/register', { email, username, password }),
   
   login: (email, password) =>
-    api.post('/auth/login', { email, password }),
+    authAPIClient.post('/login', { email, password }),
   
   getProfile: () =>
-    api.get('/auth/profile'),
+    authAPIClient.get('/profile'),
 };
 
 // Product API
 export const productAPI = {
   getProducts: (skip = 0, limit = 100) =>
-    api.get('/products', { params: { skip, limit } }),
+    productAPIClient.get('/products', { params: { skip, limit } }),
   
   getProduct: (productId) =>
-    api.get(`/products/${productId}`),
+    productAPIClient.get(`/products/${productId}`),
   
   createProduct: (productData) =>
-    api.post('/products', productData),
+    productAPIClient.post('/products', productData),
   
   updateProduct: (productId, productData) =>
-    api.put(`/products/${productId}`, productData),
+    productAPIClient.put(`/products/${productId}`, productData),
   
   deleteProduct: (productId) =>
-    api.delete(`/products/${productId}`),
+    productAPIClient.delete(`/products/${productId}`),
 };
 
 // Raffle API
 export const raffleAPI = {
   enterRaffle: (shoeSize) =>
-    api.post('/raffle/enter-raffle', { shoe_size: shoeSize }),
+    raffleAPIClient.post('/enter-raffle', { shoe_size: shoeSize }),
   
   getRaffleStats: () =>
-    api.get('/raffle/raffle-stats'),
+    raffleAPIClient.get('/raffle-stats'),
 };
 
-export default api;
+export default { authAPI, productAPI, raffleAPI };

@@ -183,16 +183,14 @@ services:
     container_name: load-tester
     env_file: .env
     environment:
-      LOCUST_HOST: http://auth-service:8001
+      LOCUST_HOST: http://localhost:8001
     depends_on:
       - auth-service
       - product-service
       - raffle-service
-    # Start with interactive mode for control
     stdin_open: true
     tty: true
-    # Command to run Locust with UI
-    command: locust -f locustfile.py --host=http://auth-service:8001 -u 5000 -r 100 --run-time 5m
+    command: locust -f locustfile.py --host=http://localhost:8001 -u 5000 -r 100 --run-time 5m
 
 # ==================== Volumes ====================
 
