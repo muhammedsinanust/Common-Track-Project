@@ -1,121 +1,98 @@
 #!/bin/bash
+# =============================================================
+# setup.sh — Install ALL system dependencies and configure DBs
+# Run once as root (or with sudo) on a fresh Ubuntu instance
+# =============================================================
+set -e
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+echo ""
+echo "=========================================="
+echo " Sneaker Store — System Setup"
+echo "=========================================="
 
-# Helper functions
-print_header() {
-    echo -e "${BLUE}===================================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}===================================================${NC}"
-}
+# ---- 1. System packages ----
+echo ""
+echo "[1/7] Installing system packages..."
+apt-get update -qq
+apt-get install -y -qq \
+    python3 python3-pip python3-venv \
+    postgresql postgresql-client \
+    redis-server \
+    gnupg curl wget \
+    nginx \
+    git
 
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
-
-# Main script
-print_header "Sneaker Store Microservices - Setup & Testing"
-
-# Check if Docker is running
-print_warning "Checking Docker..."
-if ! docker ps > /dev/null 2>&1; then
-    print_error "Docker is not running. Please start Docker Desktop."
-    exit 1
+# ---- 2. Node.js 18 ----
+echo ""
+echo "[2/7] Installing Node.js 18..."
+if ! command -v node &>/dev/null || [[ "$(node --version)" != v18* ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    apt-get install -y -qq nodejs
 fi
-print_success "Docker is running"
+echo "Node: $(node --version), npm: $(npm --version)"
 
-# Build images
-print_header "Building Docker Images"
-docker-compose build --no-cache
-if [ $? -eq 0 ]; then
-    print_success "All images built successfully"
-else
-    print_error "Failed to build images"
-    exit 1
+# ---- 3. MongoDB 6 ----
+echo ""
+echo "[3/7] Installing MongoDB 6..."
+if ! command -v mongod &>/dev/null; then
+    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-6.0.gpg
+    echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" \
+        > /etc/apt/sources.list.d/mongodb-org-6.0.list
+    apt-get update -qq
+    apt-get install -y -qq mongodb-org
 fi
+systemctl enable mongod
+systemctl start mongod
+echo "MongoDB started"
 
-# Start services
-print_header "Starting Services"
-docker-compose up -d
-if [ $? -eq 0 ]; then
-    print_success "All services started"
-else
-    print_error "Failed to start services"
-    exit 1
-fi
+# ---- 4. PostgreSQL — create users and databases ----
+echo ""
+echo "[4/7] Configuring PostgreSQL..."
+systemctl enable postgresql
+systemctl start postgresql
 
-# Wait for services to be healthy
-print_warning "Waiting for services to be ready..."
-sleep 10
+# Auth DB
+sudo -u postgres psql -c "CREATE USER authuser WITH PASSWORD 'authpassword123';" 2>/dev/null || true
+sudo -u postgres psql -c "CREATE DATABASE authdb OWNER authuser;" 2>/dev/null || true
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE authdb TO authuser;" 2>/dev/null || true
 
-# Check service health
-print_header "Checking Service Health"
+# Order DB (winner worker)
+sudo -u postgres psql -c "CREATE USER orderuser WITH PASSWORD 'orderpassword123';" 2>/dev/null || true
+sudo -u postgres psql -c "CREATE DATABASE orderdb OWNER orderuser;" 2>/dev/null || true
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE orderdb TO orderuser;" 2>/dev/null || true
 
-services=("api-gateway" "auth-service" "product-service" "raffle-service")
-all_healthy=true
+echo "PostgreSQL databases ready: authdb, orderdb"
 
-for service in "${services[@]}"; do
-    if docker-compose ps $service | grep -q "healthy"; then
-        print_success "$service is healthy"
-    else
-        print_warning "$service is starting..."
-        all_healthy=false
+# ---- 5. Redis ----
+echo ""
+echo "[5/7] Configuring Redis..."
+systemctl enable redis-server
+systemctl start redis-server
+echo "Redis started"
+
+# ---- 6. Python virtual envs and pip install ----
+echo ""
+echo "[6/7] Installing Python dependencies..."
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+for service in auth-service product-service raffle-service winner-worker load-tester; do
+    if [ -d "$REPO_DIR/$service" ]; then
+        echo "  → $service"
+        python3 -m venv "$REPO_DIR/$service/.venv"
+        "$REPO_DIR/$service/.venv/bin/pip" install -q --upgrade pip
+        "$REPO_DIR/$service/.venv/bin/pip" install -q -r "$REPO_DIR/$service/requirements.txt"
     fi
 done
 
-if [ "$all_healthy" = false ]; then
-    print_warning "Some services are still starting. Check status with: docker-compose ps"
-fi
-
-# Display service URLs
-print_header "Service URLs"
-echo -e "${BLUE}Frontend:${NC}              http://localhost:3000"
-echo -e "${BLUE}API Gateway:${NC}           http://localhost:8000"
-echo -e "${BLUE}Auth Service:${NC}          http://localhost:8001"
-echo -e "${BLUE}Product Service:${NC}       http://localhost:8002"
-echo -e "${BLUE}Raffle Service:${NC}        http://localhost:8003"
-echo -e "${BLUE}Load Tester UI:${NC}        http://localhost:8089"
-
-# Test API Gateway
-print_header "Testing API Gateway"
-response=$(curl -s http://localhost:8000/)
-if echo "$response" | grep -q "api-gateway"; then
-    print_success "API Gateway is responding"
-else
-    print_warning "API Gateway response unclear"
-fi
-
-# Sample registration command
-print_header "Quick Start - Register Test User"
-echo -e "${YELLOW}Run this to register a test user:${NC}"
-echo -e "${GREEN}curl -X POST http://localhost:8000/api/auth/register \\${NC}"
-echo -e "${GREEN}  -H 'Content-Type: application/json' \\${NC}"
-echo -e "${GREEN}  -d '{${NC}"
-echo -e "${GREEN}    \"email\": \"test@example.com\",${NC}"
-echo -e "${GREEN}    \"username\": \"testuser\",${NC}"
-echo -e "${GREEN}    \"password\": \"TestPass123\"${NC}"
-echo -e "${GREEN}  }'${NC}"
-
-# Display logs suggestion
-print_header "Monitoring"
-echo -e "${YELLOW}To view logs for a service:${NC}"
-echo -e "${GREEN}docker-compose logs -f [service-name]${NC}"
+# ---- 7. Frontend npm install ----
 echo ""
-echo -e "${YELLOW}To view all logs:${NC}"
-echo -e "${GREEN}docker-compose logs -f${NC}"
+echo "[7/7] Installing frontend dependencies..."
+cd "$REPO_DIR/frontend"
+npm install --silent
 
-print_header "Setup Complete!"
-echo -e "${GREEN}Visit http://localhost:3000 to start using the application!${NC}"
+echo ""
+echo "=========================================="
+echo " Setup complete!"
+echo " Next: run ./start.sh"
+echo "=========================================="

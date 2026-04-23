@@ -26,19 +26,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-REDIS_HOST = os.getenv("REDIS_HOST", "redis-broker")
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_DB = int(os.getenv("REDIS_DB", 0))
 
 ORDER_DB_USER = os.getenv("ORDER_DB_USER", "orderuser")
 ORDER_DB_PASSWORD = os.getenv("ORDER_DB_PASSWORD", "orderpassword123")
-ORDER_DB_HOST = os.getenv("ORDER_DB_HOST", "order-db")
+ORDER_DB_HOST = os.getenv("ORDER_DB_HOST", "localhost")
 ORDER_DB_PORT = os.getenv("ORDER_DB_PORT", "5432")
 ORDER_DB_NAME = os.getenv("ORDER_DB_NAME", "orderdb")
 
 ORDER_DATABASE_URL = f"postgresql://{ORDER_DB_USER}:{ORDER_DB_PASSWORD}@{ORDER_DB_HOST}:{ORDER_DB_PORT}/{ORDER_DB_NAME}"
 
-PRODUCT_SERVICE_URL = os.getenv("PRODUCT_SERVICE_URL", "http://product-service:8002")
+PRODUCT_SERVICE_URL = os.getenv("PRODUCT_SERVICE_URL", "http://localhost:8002")
 POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", 1))  # seconds
 
 # Database models

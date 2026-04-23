@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://root:password@product-db:27017/productdb?authSource=admin")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/productdb")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "productdb")
 
 # MongoDB Connection
@@ -81,7 +81,7 @@ app = FastAPI(title="Product Service", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
