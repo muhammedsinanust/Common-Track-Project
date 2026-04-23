@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sneaker Drop Simulator</title>
+    <style>
+        body { font-family: system-ui; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f4f5;}
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        button { background: #000; color: #fff; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #333; }
+        input { padding: 8px; margin: 5px 0 15px; width: 100%; box-sizing: border-box; }
+        pre { background: #eee; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Sneaker Drop Simulator</h1>
+    
+    <div class="card">
+        <h2>1. Check Drop Info</h2>
+        <button onclick="getDrop()">Get Upcoming Drop</button>
+        <pre id="dropResult">...</pre>
+    </div>
+
+    <div class="card">
+        <h2>2. Enter Raffle</h2>
+        <label>User ID:</label>
+        <input type="text" id="userId" placeholder="e.g. user_789">
+        <label>Shoe Size:</label>
+        <input type="text" id="shoeSize" placeholder="e.g. 10.5">
+        <button onclick="enterRaffle()">Enter Queue</button>
+        <pre id="raffleResult">...</pre>
+    </div>
+
+    <script>
+        async function getDrop() {
+            try {
+                const res = await fetch('http://localhost:8001/drop');
+                const data = await res.json();
+                document.getElementById('dropResult').innerText = JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('dropResult').innerText = 'Error connecting to Product Service';
+            }
+        }
+
+        async function enterRaffle() {
+            const uid = document.getElementById('userId').value;
+            const size = document.getElementById('shoeSize').value;
+            const resBox = document.getElementById('raffleResult');
+            resBox.innerText = 'Queuing...';
+            
+            try {
+                const res = await fetch('http://localhost:8002/enter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: uid, shoe_size: size })
+                });
+                const data = await res.json();
+                resBox.innerText = `Status: ${res.status}\n\n` + JSON.stringify(data, null, 2);
+            } catch (err) {
+                resBox.innerText = 'Error connecting to Raffle Service';
+            }
+        }
+    </script>
+</body>
+</html>
