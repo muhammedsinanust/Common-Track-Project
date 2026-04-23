@@ -1,64 +1,254 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+  # ==================== Infrastructure ====================
 
-  postgres:
+  # Auth Database
+  auth-db:
     image: postgres:15-alpine
+    container_name: auth-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: sneaker_db
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_DB: ${AUTH_DB_NAME}
     ports:
       - "5432:5432"
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - auth_db_data:/var/lib/postgresql/data
+    networks:
+      - sneaker-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d sneaker_db"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 10s
 
-  product_service:
-    build: ./product_service
-    ports:
-      - "8001:8000"
-
-  raffle_service:
-    build: ./raffle_service
-    ports:
-      - "8002:8000"
+  # Order/Winner Database
+  order-db:
+    image: postgres:15-alpine
+    container_name: order-db
     environment:
-      REDIS_HOST: redis
-    depends_on:
-      redis:
-        condition: service_healthy
+      POSTGRES_USER: ${ORDER_DB_USER}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
+      POSTGRES_DB: ${ORDER_DB_NAME}
+    ports:
+      - "5433:5432"
+    volumes:
+      - order_db_data:/var/lib/postgresql/data
+    networks:
+      - sneaker-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER} -d ${ORDER_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  worker:
-    build: ./worker
+  # Product Database (MongoDB)
+  product-db:
+    image: mongo:6.0-alpine
+    container_name: product-db
     environment:
-      REDIS_HOST: redis
-      DB_HOST: postgres
-      DB_USER: postgres
-      DB_PASS: postgres
-      DB_NAME: sneaker_db
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
+    ports:
+      - "27017:27017"
+    volumes:
+      - product_db_data:/data/db
+    networks:
+      - sneaker-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Redis Broker
+  redis-broker:
+    image: redis:7-alpine
+    container_name: redis-broker
+    command: redis-server --appendonly yes --requirepass ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sneaker-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ==================== Backend Services ====================
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    env_file: .env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8001
+      PRODUCT_SERVICE_URL: http://product-service:8002
+      RAFFLE_SERVICE_URL: http://raffle-service:8003
+      API_GATEWAY_PORT: 8000
+    ports:
+      - "8000:8000"
+    networks:
+      - sneaker-net
     depends_on:
-      redis:
+      auth-service:
         condition: service_healthy
-      postgres:
+      product-service:
         condition: service_healthy
+      raffle-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${AUTH_DB_USER}:${AUTH_DB_PASSWORD}@auth-db:5432/${AUTH_DB_NAME}
+      AUTH_SERVICE_PORT: 8001
+    ports:
+      - "8001:8001"
+    networks:
+      - sneaker-net
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Product Service
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    env_file: .env
+    environment:
+      MONGO_URI: ${MONGO_URI}
+      PRODUCT_SERVICE_PORT: 8002
+    ports:
+      - "8002:8002"
+    networks:
+      - sneaker-net
+    depends_on:
+      product-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Raffle Service
+  raffle-service:
+    build:
+      context: ./raffle-service
+      dockerfile: Dockerfile
+    container_name: raffle-service
+    env_file: .env
+    environment:
+      REDIS_HOST: redis-broker
+      REDIS_PORT: 6379
+      RAFFLE_SERVICE_PORT: 8003
+    ports:
+      - "8003:8003"
+    networks:
+      - sneaker-net
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Winner Processor Worker
+  winner-worker:
+    build:
+      context: ./winner-worker
+      dockerfile: Dockerfile
+    container_name: winner-worker
+    env_file: .env
+    environment:
+      REDIS_HOST: redis-broker
+      REDIS_PORT: 6379
+      ORDER_DB_HOST: order-db
+      ORDER_DB_USER: ${ORDER_DB_USER}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}
+      ORDER_DB_NAME: ${ORDER_DB_NAME}
+      PRODUCT_SERVICE_URL: http://product-service:8002
+      POLLING_INTERVAL: 1
+    networks:
+      - sneaker-net
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+      order-db:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==================== Frontend ====================
 
   frontend:
-    image: nginx:alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:8000/api
     ports:
-      - "8080:80"
-    volumes:
-      - ./frontend:/usr/share/nginx/html
+      - "3000:3000"
+    networks:
+      - sneaker-net
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # ==================== Load Tester ====================
+
+  load-tester:
+    build:
+      context: ./load-tester
+      dockerfile: Dockerfile
+    container_name: load-tester
+    env_file: .env
+    environment:
+      LOCUST_HOST: http://api-gateway:8000
+    networks:
+      - sneaker-net
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    # Start with interactive mode for control
+    stdin_open: true
+    tty: true
+    # Command to run Locust with UI
+    command: locust -f locustfile.py --host=http://api-gateway:8000 -u 5000 -r 100 --run-time 5m
+
+# ==================== Networks ====================
+
+networks:
+  sneaker-net:
+    driver: bridge
+    name: sneaker-net
+
+# ==================== Volumes ====================
+
+volumes:
+  auth_db_data:
+    driver: local
+  order_db_data:
+    driver: local
+  product_db_data:
+    driver: local
+  redis_data:
+    driver: local
