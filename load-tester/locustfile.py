@@ -5,8 +5,10 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
-LOCUST_HOST = os.getenv("LOCUST_HOST", "http://api-gateway:8000")
+# Configuration - direct service URLs (no gateway)
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001")
+PRODUCT_SERVICE_URL = os.getenv("PRODUCT_SERVICE_URL", "http://product-service:8002")
+RAFFLE_SERVICE_URL = os.getenv("RAFFLE_SERVICE_URL", "http://raffle-service:8003")
 
 class RaffleUser(HttpUser):
     """Simulates a user entering raffle during a sneaker drop."""
@@ -27,21 +29,23 @@ class RaffleUser(HttpUser):
         """Register or login a test user."""
         import uuid
         import random
+        import httpx
         
         unique_id = str(uuid.uuid4())[:8]
         email = f"testuser_{unique_id}@test.com"
         username = f"testuser_{unique_id}"
         password = "TestPass123"
         
-        # Try to register
+        # Try to register (direct to auth service)
         try:
-            register_response = self.client.post(
-                "/api/auth/register",
+            register_response = httpx.post(
+                f"{AUTH_SERVICE_URL}/register",
                 json={
                     "email": email,
                     "username": username,
                     "password": password
-                }
+                },
+                timeout=10
             )
             
             if register_response.status_code == 200:
@@ -51,14 +55,15 @@ class RaffleUser(HttpUser):
         except Exception as e:
             logger.error(f"Registration error: {e}")
         
-        # Login
+        # Login (direct to auth service)
         try:
-            login_response = self.client.post(
-                "/api/auth/login",
+            login_response = httpx.post(
+                f"{AUTH_SERVICE_URL}/login",
                 json={
                     "email": email,
                     "password": password
-                }
+                },
+                timeout=10
             )
             
             if login_response.status_code == 200:
@@ -66,11 +71,6 @@ class RaffleUser(HttpUser):
                 self.token = data.get("access_token")
                 self.user_id = data.get("user_id")
                 logger.info(f"User authenticated: {self.user_id}")
-                
-                # Set authorization header for all subsequent requests
-                self.client.headers.update({
-                    "Authorization": f"Bearer {self.token}"
-                })
             else:
                 logger.error(f"Login failed: {login_response.status_code}")
         except Exception as e:
@@ -78,8 +78,9 @@ class RaffleUser(HttpUser):
     
     @task(1)
     def enter_raffle(self):
-        """Enter raffle with random shoe size."""
+        """Enter raffle with random shoe size (direct to raffle service)."""
         import random
+        import httpx
         
         if not self.token:
             logger.warning("Not authenticated, skipping raffle entry")
@@ -88,10 +89,11 @@ class RaffleUser(HttpUser):
         shoe_size = random.choice(self.shoe_sizes)
         
         try:
-            response = self.client.post(
-                "/api/raffle/enter-raffle",
+            response = httpx.post(
+                f"{RAFFLE_SERVICE_URL}/enter-raffle",
                 json={"shoe_size": shoe_size},
-                name="/api/raffle/enter-raffle"
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=10
             )
             
             if response.status_code in [200, 202]:
@@ -103,9 +105,14 @@ class RaffleUser(HttpUser):
     
     @task(1)
     def get_products(self):
-        """Fetch product list."""
+        """Fetch product list (direct to product service)."""
+        import httpx
+        
         try:
-            response = self.client.get("/api/products?limit=10")
+            response = httpx.get(
+                f"{PRODUCT_SERVICE_URL}/products?limit=10",
+                timeout=10
+            )
             if response.status_code == 200:
                 logger.debug("Products fetched successfully")
             else:
@@ -121,10 +128,18 @@ class WebsiteUser(HttpUser):
     
     @task(2)
     def view_products(self):
-        """View products page."""
-        self.client.get("/api/products?limit=20")
+        """View products page (direct to product service)."""
+        import httpx
+        try:
+            httpx.get(f"{PRODUCT_SERVICE_URL}/products?limit=20", timeout=10)
+        except Exception as e:
+            logger.error(f"View products error: {e}")
     
     @task(1)
     def view_raffle_stats(self):
-        """Check raffle stats."""
-        self.client.get("/api/raffle/raffle-stats")
+        """Check raffle stats (direct to raffle service)."""
+        import httpx
+        try:
+            httpx.get(f"{RAFFLE_SERVICE_URL}/raffle-stats", timeout=10)
+        except Exception as e:
+            logger.error(f"View raffle stats error: {e}")

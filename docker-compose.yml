@@ -181,7 +181,9 @@ services:
     container_name: load-tester
     env_file: .env
     environment:
-      LOCUST_HOST: http://auth-service:8001
+      AUTH_SERVICE_URL: http://auth-service:8001
+      PRODUCT_SERVICE_URL: http://product-service:8002
+      RAFFLE_SERVICE_URL: http://raffle-service:8003
     depends_on:
       - auth-service
       - product-service

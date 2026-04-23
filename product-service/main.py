@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://product-db:27017/productdb")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://root:password@product-db:27017/productdb?authSource=admin")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "productdb")
 
 # MongoDB Connection

@@ -51,5 +51,4 @@ temp/
 *.tmp
 
 # Lock files (if using node)
-package-lock.json
 yarn.lock

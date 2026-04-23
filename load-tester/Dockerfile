@@ -9,5 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy locustfile
 COPY locustfile.py .
 
-# Default command - can be overridden when running
-CMD ["locust", "-f", "locustfile.py", "--host=http://api-gateway:8000"]
+# Default command - hits auth-service directly (no gateway)
+CMD ["locust", "-f", "locustfile.py", "--host=http://auth-service:8001"]

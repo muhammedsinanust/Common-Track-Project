@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { raffleAPI } from '../api';
+import { raffleAPI } from './api';
 import CountdownTimer from './CountdownTimer';
 
 const ProductCard = ({ product, isAuthenticated, userRole }) => {
