@@ -1,0 +1,1 @@
+# Auth Service app package

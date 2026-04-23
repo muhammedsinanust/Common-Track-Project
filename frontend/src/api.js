@@ -1,77 +1,48 @@
 import axios from 'axios';
 
-// When running on a remote server (Ubuntu EC2), the browser fetches from the
-// server's public IP. Use REACT_APP_*_URL env vars at build time, or fall back
-// to window.location.hostname so the browser always hits the right server.
-const HOST = window.location.hostname; // e.g. "18.234.x.x" or "localhost"
+/**
+ * API client configured via environment variables.
+ *
+ * In production (Docker), these are set at build time or via nginx proxy.
+ * In development, they default to localhost.
+ */
 
-const AUTH_SERVICE_URL =
-  process.env.REACT_APP_AUTH_SERVICE_URL || `http://${HOST}:8001`;
-const PRODUCT_SERVICE_URL =
-  process.env.REACT_APP_PRODUCT_SERVICE_URL || `http://${HOST}:8002`;
-const RAFFLE_SERVICE_URL =
-  process.env.REACT_APP_RAFFLE_SERVICE_URL || `http://${HOST}:8003`;
+const AUTH_URL    = import.meta.env.VITE_AUTH_URL    || 'http://localhost:8001';
+const PRODUCT_URL = import.meta.env.VITE_PRODUCT_URL || 'http://localhost:8002';
+const RAFFLE_URL  = import.meta.env.VITE_RAFFLE_URL  || 'http://localhost:8003';
 
-const createApi = (baseURL) => {
-  const instance = axios.create({
-    baseURL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+// ── Auth Service ────────────────────────────────────────────────────────────
+
+export const authAPI = axios.create({ baseURL: AUTH_URL });
+
+export const registerUser = (data) =>
+  authAPI.post('/api/auth/register', data);
+
+export const loginUser = (data) =>
+  authAPI.post('/api/auth/login', data);
+
+export const getProfile = (token) =>
+  authAPI.get('/api/auth/profile', {
+    headers: { Authorization: `Bearer ${token}` },
   });
 
-  instance.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
+// ── Product Service ─────────────────────────────────────────────────────────
 
-  return instance;
-};
+export const productAPI = axios.create({ baseURL: PRODUCT_URL });
 
-export const authAPIClient = createApi(AUTH_SERVICE_URL);
-export const productAPIClient = createApi(PRODUCT_SERVICE_URL);
-export const raffleAPIClient = createApi(RAFFLE_SERVICE_URL);
+export const getProducts = () =>
+  productAPI.get('/api/products/products');
 
-// Auth API
-export const authAPI = {
-  register: (email, username, password) =>
-    authAPIClient.post('/register', { email, username, password }),
+export const getDrops = () =>
+  productAPI.get('/api/products/drops');
 
-  login: (email, password) =>
-    authAPIClient.post('/login', { email, password }),
+// ── Raffle Service ──────────────────────────────────────────────────────────
 
-  getProfile: () =>
-    authAPIClient.get('/profile'),
-};
+export const raffleAPI = axios.create({ baseURL: RAFFLE_URL });
 
-// Product API
-export const productAPI = {
-  getProducts: (skip = 0, limit = 100) =>
-    productAPIClient.get('/products', { params: { skip, limit } }),
-
-  getProduct: (productId) =>
-    productAPIClient.get(`/products/${productId}`),
-
-  createProduct: (productData) =>
-    productAPIClient.post('/products', productData),
-
-  updateProduct: (productId, productData) =>
-    productAPIClient.put(`/products/${productId}`, productData),
-
-  deleteProduct: (productId) =>
-    productAPIClient.delete(`/products/${productId}`),
-};
-
-// Raffle API
-export const raffleAPI = {
-  enterRaffle: (shoeSize) =>
-    raffleAPIClient.post('/enter-raffle', { shoe_size: shoeSize }),
-
-  getRaffleStats: () =>
-    raffleAPIClient.get('/raffle-stats'),
-};
-
-export default { authAPI, productAPI, raffleAPI };
+export const enterRaffle = (token, shoeSize) =>
+  raffleAPI.post(
+    '/api/raffle/enter-raffle',
+    { shoe_size: shoeSize },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
