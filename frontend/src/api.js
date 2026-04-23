@@ -1,15 +1,16 @@
 import axios from 'axios';
 
 /**
- * API client configured via environment variables.
+ * API client.
  *
- * In production (Docker), these are set at build time or via nginx proxy.
- * In development, they default to localhost.
+ * In Docker-compose mode, nginx reverse-proxies /api/* to the correct service,
+ * so base URLs are empty (same origin). For standalone/native mode you can
+ * override via VITE_*_URL env vars at build time.
  */
 
-const AUTH_URL    = import.meta.env.VITE_AUTH_URL    || 'http://localhost:8001';
-const PRODUCT_URL = import.meta.env.VITE_PRODUCT_URL || 'http://localhost:8002';
-const RAFFLE_URL  = import.meta.env.VITE_RAFFLE_URL  || 'http://localhost:8003';
+const AUTH_URL    = import.meta.env.VITE_AUTH_URL    || '';
+const PRODUCT_URL = import.meta.env.VITE_PRODUCT_URL || '';
+const RAFFLE_URL  = import.meta.env.VITE_RAFFLE_URL  || '';
 
 // ── Auth Service ────────────────────────────────────────────────────────────
 
